@@ -1,0 +1,367 @@
+# ============================================================
+# FOUR-PAGE DASHBOARD: WAR'S ECONOMIC & SOCIAL IMPACT (STRUCTURED)
+# ============================================================
+
+from pathlib import Path
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# ------------------------------------------------------------
+# 1. Configuration
+# ------------------------------------------------------------
+
+DATA_PATH = Path("war_economic_impact_dataset.csv")
+OUTPUT_DIR = Path("war_impact_figures_four_page")
+OUTPUT_DIR.mkdir(exist_ok=True)
+
+sns.set_theme(style="whitegrid", context="notebook")
+
+plt.rcParams.update({
+    "figure.dpi": 120,
+    "axes.titlesize": 14,
+    "axes.labelsize": 11,
+    "xtick.labelsize": 9,
+    "ytick.labelsize": 9,
+    "legend.fontsize": 9,
+})
+
+# ------------------------------------------------------------
+# 2. Load and prepare data
+# ------------------------------------------------------------
+
+df = pd.read_csv(DATA_PATH)
+
+df.columns = (
+    df.columns
+      .str.strip()
+      .str.lower()
+      .str.replace("%", "pct", regex=False)
+      .str.replace(r"[^a-z0-9]+", "_", regex=True)
+      .str.strip("_")
+)
+
+rename_columns = {
+    "conflict_name": "conflict",
+    "primary_country": "country",
+    "pre_war_unemployment_pct": "pre_unemployment",
+    "during_war_unemployment_pct": "during_unemployment",
+    "unemployment_spike_percentage_points": "unemployment_spike",
+    "pre_war_poverty_rate_pct": "pre_poverty",
+    "during_war_poverty_rate_pct": "during_poverty",
+    "youth_unemployment_change_pct": "youth_unemployment_change",
+    "extreme_poverty_rate_pct": "extreme_poverty",
+    "food_insecurity_rate_pct": "food_insecurity",
+    "households_fallen_into_poverty_estimate": "households_into_poverty",
+    "gdp_change_pct": "gdp_change",
+    "inflation_rate_pct": "inflation",
+    "currency_devaluation_pct": "currency_devaluation",
+    "cost_of_war_usd": "war_cost",
+    "estimated_reconstruction_cost_usd": "reconstruction_cost",
+    "informal_economy_size_pre_war_pct": "informal_pre",
+    "informal_economy_size_during_war_pct": "informal_during",
+    "currency_black_market_rate_gap_pct": "black_market_rate_gap",
+    "black_market_activity_level": "black_market_level",
+    "primary_black_market_goods": "black_market_goods",
+    "war_profiteering_documented": "war_profiteering",
+    "most_affected_sector": "affected_sector",
+}
+
+df.rename(columns={old: new for old, new in rename_columns.items() if old in df.columns}, inplace=True)
+
+text_columns = df.select_dtypes(include=["object", "string", "category"]).columns
+for column in text_columns:
+    df[column] = (
+        df[column].astype("string")
+        .str.strip()
+        .replace({"": pd.NA, "nan": pd.NA, "None": pd.NA})
+        .fillna("Unknown")
+    )
+
+numeric_columns = [
+    "start_year", "end_year", "pre_unemployment", "during_unemployment",
+    "unemployment_spike", "youth_unemployment_change", "pre_poverty",
+    "during_poverty", "extreme_poverty", "food_insecurity",
+    "households_into_poverty", "gdp_change", "inflation",
+    "currency_devaluation", "war_cost", "reconstruction_cost",
+    "informal_pre", "informal_during", "black_market_rate_gap"
+]
+
+numeric_columns = [col for col in numeric_columns if col in df.columns]
+
+for col in numeric_columns:
+    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(df[col].median())
+
+# ------------------------------------------------------------
+# 3. Feature engineering
+# ------------------------------------------------------------
+
+df["poverty_change"] = df["during_poverty"] - df["pre_poverty"]
+df["informal_economy_change"] = df["informal_during"] - df["informal_pre"]
+df["reconstruction_premium"] = (df["reconstruction_cost"] - df["war_cost"]) / df["war_cost"] * 100
+
+# ------------------------------------------------------------
+# 4. Aggregations
+# ------------------------------------------------------------
+
+conflict_summary = df.groupby("conflict", as_index=False).agg(
+    observations=("conflict", "size"),
+    gdp_change=("gdp_change", "mean"),
+    unemployment_spike=("unemployment_spike", "mean"),
+    poverty_change=("poverty_change", "mean"),
+    inflation=("inflation", "mean"),
+    informal_economy_change=("informal_economy_change", "mean"),
+    war_cost=("war_cost", "mean"),
+    reconstruction_cost=("reconstruction_cost", "mean"),
+)
+
+region_summary = df.groupby("region", as_index=False).agg(
+    gdp_change=("gdp_change", "mean"),
+    unemployment_spike=("unemployment_spike", "mean"),
+    poverty_change=("poverty_change", "mean"),
+    inflation=("inflation", "mean"),
+    informal_economy_change=("informal_economy_change", "mean"),
+)
+
+# ------------------------------------------------------------
+# 5. KPIs
+# ------------------------------------------------------------
+
+average_gdp_change = df["gdp_change"].mean()
+average_unemployment_spike = df["unemployment_spike"].mean()
+average_poverty_change = df["poverty_change"].mean()
+average_inflation = df["inflation"].mean()
+average_informal_change = df["informal_economy_change"].mean()
+
+cost_correlation = df[["war_cost", "reconstruction_cost"]].corr().iloc[0, 1]
+poverty_unemployment_correlation = df[["poverty_change", "unemployment_spike"]].corr().iloc[0, 1]
+
+# Helper: percentage change vs min
+def pct_increase(series, avg):
+    base = series.min()
+    if base == 0:
+        return np.nan
+    return (avg - base) / abs(base) * 100
+
+gdp_pct_inc = pct_increase(conflict_summary["gdp_change"], average_gdp_change)
+unemp_pct_inc = pct_increase(conflict_summary["unemployment_spike"], average_unemployment_spike)
+poverty_pct_inc = pct_increase(conflict_summary["poverty_change"], average_poverty_change)
+infl_pct_inc = pct_increase(region_summary["inflation"], average_inflation)
+
+# ============================================================
+# DASHBOARD 1 (PAGE 1) — GDP & UNEMPLOYMENT BY CONFLICT
+# ============================================================
+
+fig1, axes = plt.subplots(1, 2, figsize=(18, 10))
+fig1.suptitle("PAGE 1 — Economic Impact: GDP & Unemployment by Conflict", fontsize=22, fontweight="bold")
+
+# GDP Change by Conflict
+plot_gdp = conflict_summary.sort_values("gdp_change")
+colors_gdp = ["#b2182b" if v < 0 else "#2166ac" for v in plot_gdp["gdp_change"]]
+
+axes[0].barh(plot_gdp["conflict"], plot_gdp["gdp_change"], color=colors_gdp)
+axes[0].set_title("GDP Change by Conflict")
+axes[0].set_xlabel("GDP Change (%)")
+
+# Trend markers (slope-based arrows)
+gdp_vals = plot_gdp["gdp_change"].values
+for i in range(1, len(gdp_vals)):
+    slope = gdp_vals[i] - gdp_vals[i - 1]
+    arrow = "▲" if slope > 0 else "▼"
+    color = "green" if slope > 0 else "red"
+    axes[0].text(gdp_vals[i], i, arrow, fontsize=10, color=color, va="center")
+
+# Average line
+axes[0].axvline(average_gdp_change, color="black", linestyle="--", linewidth=1.5)
+
+# Summary text for GDP
+axes[0].text(
+    0.02, 0.02,
+    f"Avg GDP change: {average_gdp_change:.2f}%\n"
+    f"Approx. % change vs min: {gdp_pct_inc:.1f}%",
+    transform=axes[0].transAxes,
+    fontsize=9,
+    bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+)
+
+# Unemployment Spike by Conflict
+plot_unemp = conflict_summary.sort_values("unemployment_spike")
+axes[1].barh(plot_unemp["conflict"], plot_unemp["unemployment_spike"], color="#d6604d")
+axes[1].set_title("Unemployment Spike by Conflict")
+axes[1].set_xlabel("Increase (percentage points)")
+
+unemp_vals = plot_unemp["unemployment_spike"].values
+for i in range(1, len(unemp_vals)):
+    slope = unemp_vals[i] - unemp_vals[i - 1]
+    arrow = "▲" if slope > 0 else "▼"
+    color = "green" if slope > 0 else "red"
+    axes[1].text(unemp_vals[i], i, arrow, fontsize=10, color=color, va="center")
+
+axes[1].axvline(average_unemployment_spike, color="black", linestyle="--", linewidth=1.5)
+
+axes[1].text(
+    0.02, 0.02,
+    f"Avg unemployment spike: {average_unemployment_spike:.2f} pp\n"
+    f"Approx. % change vs min: {unemp_pct_inc:.1f}%",
+    transform=axes[1].transAxes,
+    fontsize=9,
+    bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+)
+
+plt.tight_layout()
+fig1.savefig(OUTPUT_DIR / "page1_gdp_unemployment_dashboard.png")
+
+# ============================================================
+# DASHBOARD 2 (PAGE 2) — POVERTY & INFLATION
+# ============================================================
+
+fig2, axes = plt.subplots(1, 2, figsize=(18, 10))
+fig2.suptitle("PAGE 2 — Poverty & Inflation Dashboard", fontsize=22, fontweight="bold")
+
+# Poverty Change by Conflict
+plot_pov = conflict_summary.sort_values("poverty_change")
+colors_pov = ["#ef8a62" if v > 0 else "#2166ac" for v in plot_pov["poverty_change"]]
+
+axes[0].barh(plot_pov["conflict"], plot_pov["poverty_change"], color=colors_pov)
+axes[0].set_title("Poverty Change by Conflict")
+axes[0].set_xlabel("Change (percentage points)")
+
+pov_vals = plot_pov["poverty_change"].values
+for i in range(1, len(pov_vals)):
+    slope = pov_vals[i] - pov_vals[i - 1]
+    arrow = "▲" if slope > 0 else "▼"
+    color = "green" if slope > 0 else "red"
+    axes[0].text(pov_vals[i], i, arrow, fontsize=10, color=color, va="center")
+
+axes[0].axvline(average_poverty_change, color="black", linestyle="--", linewidth=1.5)
+
+axes[0].text(
+    0.02, 0.02,
+    f"Avg poverty change: {average_poverty_change:.2f} pp\n"
+    f"Approx. % change vs min: {poverty_pct_inc:.1f}%",
+    transform=axes[0].transAxes,
+    fontsize=9,
+    bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+)
+
+# Inflation by Region
+plot_infl = region_summary.sort_values("inflation")
+axes[1].barh(plot_infl["region"], plot_infl["inflation"], color="#e08214")
+axes[1].set_title("Inflation by Region")
+axes[1].set_xlabel("Inflation (%)")
+
+infl_vals = plot_infl["inflation"].values
+for i in range(1, len(infl_vals)):
+    slope = infl_vals[i] - infl_vals[i - 1]
+    arrow = "▲" if slope > 0 else "▼"
+    color = "green" if slope > 0 else "red"
+    axes[1].text(infl_vals[i], i, arrow, fontsize=10, color=color, va="center")
+
+axes[1].axvline(average_inflation, color="black", linestyle="--", linewidth=1.5)
+
+axes[1].text(
+    0.02, 0.02,
+    f"Avg inflation: {average_inflation:.2f}%\n"
+    f"Approx. % change vs min: {infl_pct_inc:.1f}%",
+    transform=axes[1].transAxes,
+    fontsize=9,
+    bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+)
+
+plt.tight_layout()
+fig2.savefig(OUTPUT_DIR / "page2_poverty_inflation_dashboard.png")
+
+# ============================================================
+# DASHBOARD 3 (PAGE 3) — SOCIAL & STRUCTURAL IMPACT
+# ============================================================
+
+fig3, axes = plt.subplots(1, 2, figsize=(18, 10))
+fig3.suptitle("PAGE 3 — Social & Structural Impact Dashboard", fontsize=22, fontweight="bold")
+
+# Unemployment vs Poverty (scatter + trend)
+sns.regplot(
+    data=df,
+    x="unemployment_spike",
+    y="poverty_change",
+    scatter_kws={"alpha": 0.2, "s": 20, "color": "#7f0000"},
+    line_kws={"color": "black", "linewidth": 2},
+    ax=axes[0]
+)
+axes[0].set_title("Unemployment vs Poverty")
+
+axes[0].text(
+    0.02, 0.95,
+    f"Correlation: {poverty_unemployment_correlation:.3f}",
+    transform=axes[0].transAxes,
+    fontsize=9,
+    bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+)
+
+# War Cost vs Reconstruction Cost
+sns.regplot(
+    data=df,
+    x="war_cost",
+    y="reconstruction_cost",
+    scatter_kws={"alpha": 0.2, "s": 20, "color": "#2166ac"},
+    line_kws={"color": "black", "linewidth": 2},
+    ax=axes[1]
+)
+axes[1].set_title("War Cost vs Reconstruction Cost")
+
+axes[1].text(
+    0.02, 0.95,
+    f"Correlation: {cost_correlation:.3f}",
+    transform=axes[1].transAxes,
+    fontsize=9,
+    bbox=dict(boxstyle="round", facecolor="white", alpha=0.8)
+)
+
+plt.tight_layout()
+fig3.savefig(OUTPUT_DIR / "page3_social_structural_dashboard.png")
+
+# ============================================================
+# DASHBOARD 4 (PAGE 4) — KPI, EXECUTIVE SUMMARY & REMARKS
+# ============================================================
+
+fig4, ax = plt.subplots(figsize=(18, 12))
+fig4.suptitle("PAGE 4 — KPI Panel, Executive Summary & Remarks", fontsize=24, fontweight="bold")
+
+kpi_text = f"""
+KEY PERFORMANCE INDICATORS
+------------------------------------------------------------
+• Average GDP change: {average_gdp_change:.2f}% (approx. {gdp_pct_inc:.1f}% vs min)
+• Average unemployment spike: {average_unemployment_spike:.2f} pp (approx. {unemp_pct_inc:.1f}% vs min)
+• Average poverty change: {average_poverty_change:.2f} pp (approx. {poverty_pct_inc:.1f}% vs min)
+• Average inflation: {average_inflation:.2f}% (approx. {infl_pct_inc:.1f}% vs min)
+• Average informal economy change: {average_informal_change:.2f} pp
+
+EXECUTIVE SUMMARY
+------------------------------------------------------------
+Conflict is associated with broad economic and social pressure:
+• GDP declines and unemployment rises.
+• Poverty increases and informal economic activity expands.
+• Inflation varies significantly by region.
+• Reconstruction costs scale with war intensity.
+
+The correlation between war costs and reconstruction costs is {cost_correlation:.3f},
+indicating that more expensive conflicts tend to require greater reconstruction investment.
+
+The strongest social relationship is between unemployment increases and poverty increases,
+with a correlation of {poverty_unemployment_correlation:.3f}.
+
+REMARKS
+------------------------------------------------------------
+These results are descriptive associations, not causal proof.
+Repeated or simulated observations may influence averages and correlations.
+Interpret trends as indicative patterns rather than deterministic outcomes.
+"""
+
+ax.text(0.03, 0.97, kpi_text, fontsize=13, va="top")
+ax.axis("off")
+
+plt.tight_layout()
+fig4.savefig(OUTPUT_DIR / "page4_kpi_summary_remarks.png")
+
+print("Four-page structured dashboard generated successfully!")
+print(f"Saved in: {OUTPUT_DIR.resolve()}")
