@@ -1,0 +1,4 @@
+﻿Function,Description,Example
+DIVIDE(),Safe division avoiding errors,"DIVIDE(SUM(Sales[Amount]), SUM(Sales[Quantity]))"
+ROUND(),Rounds to specified decimals,"ROUND(Sales[Amount], 2)"
+RANKX(),Ranks values,"RANKX(ALL(Customer), SUM(Sales[Amount]))"

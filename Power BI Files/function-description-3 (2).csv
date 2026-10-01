@@ -1,0 +1,4 @@
+﻿Function,Description,Example
+SUMX() / AVERAGEX(),Iterates over table rows,"SUMX(Sales, Sales[Quantity]*Sales[Price])"
+VALUES(),Returns unique values,VALUES(Product[Category])
+EARLIER(),Refers to earlier row context,Sales[Amount] - EARLIER(Sales[Amount])

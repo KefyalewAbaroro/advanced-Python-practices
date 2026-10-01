@@ -1,0 +1,5 @@
+﻿Function,Description,Example
+RELATED(),Fetches value from related table,RELATED(Customer[Name])
+RELATEDTABLE(),Returns related table,RELATEDTABLE(Orders)
+ALL(),Removes filters,"CALCULATE(SUM(Sales[Amount]), ALL(Region))"
+ALLEXCEPT(),Removes all filters except specified,"ALLEXCEPT(Sales, Sales[Product])"

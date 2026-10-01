@@ -1,0 +1,5 @@
+﻿Function,Description,Example
+CALCULATE(),Changes filter context for calculations,"CALCULATE(SUM(Sales[Amount]), Region=""East"")"
+FILTER(),Returns a table filtered by condition,"FILTER(Sales, Sales[Amount]>1000)"
+IF(),Conditional logic,"IF(Sales[Amount]>1000,""High"",""Low"")"
+SWITCH(),Multi‑condition logic,"SWITCH(TRUE(), Sales[Amount]>1000,""High"", Sales[Amount]>500,""Medium"",""Low"")"

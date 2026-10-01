@@ -1,0 +1,5 @@
+﻿Function,Description,Example
+TOTALYTD(),Year‑to‑date total,"TOTALYTD(SUM(Sales[Amount]), Date[Date])"
+SAMEPERIODLASTYEAR(),Compares same period last year,"CALCULATE(SUM(Sales[Amount]), SAMEPERIODLASTYEAR(Date[Date]))"
+DATEADD(),Shifts dates by interval,"DATEADD(Date[Date], -1, MONTH)"
+PARALLELPERIOD(),Shifts date context by period,"PARALLELPERIOD(Date[Date], -1, YEAR)"

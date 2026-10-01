@@ -1,0 +1,6 @@
+﻿Function,Description,Example
+SUM(),Adds all numeric values in a column,SUM(Sales[Amount])
+AVERAGE(),Calculates mean value,AVERAGE(Sales[Amount])
+COUNT(),Counts rows with non‑blank values,COUNT(Sales[OrderID])
+DISTINCTCOUNT(),Counts unique values,DISTINCTCOUNT(Customer[CustomerID])
+MIN() / MAX(),Returns smallest or largest value,MAX(Sales[Amount])

@@ -1,0 +1,4 @@
+﻿Function,Description,Example
+CONCATENATE(),Joins two text strings,"CONCATENATE(Customer[FirstName], Customer[LastName])"
+SEARCH(),Finds substring position,"SEARCH(""Pro"", Product[Name])"
+AND() / OR(),Logical operators,"AND(Sales[Amount]>1000, Sales[Quantity]>5)"

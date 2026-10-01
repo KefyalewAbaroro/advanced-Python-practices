@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sales Seasonality — Executive Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#12191A;
+    --surface:#1B2325;
+    --surface-raised:#212B2D;
+    --line:#2B3638;
+    --text:#F1EEE7;
+    --text-muted:#8FA1A0;
+    --amber:#E8934A;
+    --teal:#4FB8A6;
+    --spring:#7FB88F;
+    --summer:#E8934A;
+    --fall:#C1622D;
+    --winter:#5B8AA6;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'IBM Plex Sans',sans-serif;}
+  .app{display:flex;min-height:100vh;}
+
+  /* Sidebar */
+  .sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--line);padding:28px 18px;display:flex;flex-direction:column;gap:6px;}
+  .brand{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;letter-spacing:0.02em;margin-bottom:2px;}
+  .brand-sub{font-size:11px;color:var(--text-muted);margin-bottom:26px;letter-spacing:0.04em;text-transform:uppercase;}
+  .navbtn{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;color:var(--text-muted);font-size:13.5px;font-weight:500;border:1px solid transparent;transition:all .15s;}
+  .navbtn .num{font-family:'IBM Plex Mono',monospace;font-size:11px;width:18px;color:inherit;}
+  .navbtn:hover{background:var(--surface-raised);color:var(--text);}
+  .navbtn.active{background:var(--surface-raised);color:var(--text);border-color:var(--line);}
+  .navbtn.active .num{color:var(--amber);}
+  .sidebar-foot{margin-top:auto;font-size:10.5px;color:var(--text-muted);line-height:1.5;padding-top:16px;border-top:1px solid var(--line);}
+
+  /* Main */
+  .main{flex:1;padding:30px 40px 60px;max-width:1280px;}
+  .pagehead{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:26px;flex-wrap:wrap;gap:10px;}
+  .pagehead h1{font-family:'Space Grotesk',sans-serif;font-size:26px;margin:0 0 4px;font-weight:600;}
+  .pagehead p{margin:0;color:var(--text-muted);font-size:13.5px;}
+  .rangepill{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-muted);border:1px solid var(--line);padding:5px 12px;border-radius:20px;}
+
+  .page{display:none;}
+  .page.active{display:block;animation:fade .35s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+
+  /* KPI cards */
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:22px;}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 18px 16px;position:relative;overflow:hidden;}
+  .kpi::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;background:var(--accent,var(--amber));}
+  .kpi-label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;}
+  .kpi-value{font-family:'IBM Plex Mono',monospace;font-size:26px;font-weight:600;color:var(--text);}
+  .kpi-sub{font-size:11.5px;color:var(--text-muted);margin-top:6px;}
+  .kpi-sub.up{color:var(--teal);}
+  .kpi-sub.down{color:var(--fall);}
+
+  /* Cards / panels */
+  .grid2{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:16px;}
+  .panel h3{font-family:'Space Grotesk',sans-serif;font-size:14.5px;margin:0 0 3px;font-weight:600;}
+  .panel .desc{font-size:11.5px;color:var(--text-muted);margin:0 0 14px;}
+  .chart-wrap{position:relative;width:100%;}
+
+  /* Season strip */
+  .season-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
+  .season-card{border-radius:12px;padding:16px 18px;border:1px solid var(--line);background:var(--surface);position:relative;}
+  .season-card .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:7px;}
+  .season-card .sname{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px;}
+  .season-card .sval{font-family:'IBM Plex Mono',monospace;font-size:20px;margin-top:8px;font-weight:600;}
+  .season-card .sbar{height:5px;border-radius:3px;background:var(--line);margin-top:10px;overflow:hidden;}
+  .season-card .sbar>div{height:100%;border-radius:3px;}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  th{text-align:left;color:var(--text-muted);font-weight:500;text-transform:uppercase;font-size:10.5px;letter-spacing:.04em;padding:8px 10px;border-bottom:1px solid var(--line);}
+  td{padding:9px 10px;border-bottom:1px solid var(--line);font-family:'IBM Plex Mono',monospace;font-size:12px;}
+  tr:last-child td{border-bottom:none;}
+  td.label{font-family:'IBM Plex Sans',sans-serif;font-size:12.5px;}
+
+  .insight{display:flex;gap:10px;align-items:flex-start;background:var(--surface-raised);border:1px solid var(--line);border-radius:10px;padding:12px 14px;font-size:12.5px;color:var(--text-muted);line-height:1.5;}
+  .insight b{color:var(--text);}
+  .insight-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;}
+
+  .legend-row{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;}
+  .legend-item{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-muted);}
+  .legend-item .sw{width:10px;height:10px;border-radius:3px;}
+
+  @media(max-width:1000px){
+    .app{flex-direction:column;}
+    .sidebar{width:100%;flex-direction:row;overflow-x:auto;padding:14px;}
+    .sidebar-foot{display:none;}
+    .brand,.brand-sub{display:none;}
+    .grid2,.grid3,.grid4{grid-template-columns:1fr;}
+    .season-strip{grid-template-columns:1fr 1fr;}
+    .main{padding:22px 16px 50px;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <div class="brand">Adventure Cycles</div>
+    <div class="brand-sub">Sales Seasonality</div>
+    <div class="navbtn active" data-page="1"><span class="num">01</span> Executive Summary</div>
+    <div class="navbtn" data-page="2"><span class="num">02</span> KPI Deep Dive</div>
+    <div class="navbtn" data-page="3"><span class="num">03</span> Sales &amp; Profit Trends</div>
+    <div class="navbtn" data-page="4"><span class="num">04</span> Category Performance</div>
+    <div class="navbtn" data-page="5"><span class="num">05</span> Seasonal Variance</div>
+    <div class="sidebar-foot">23,797 orders<br>Jan 2011 – Dec 2013 (full years)<br>Source: Sales Seasonality export</div>
+  </div>
+
+  <div class="main">
+
+    <!-- PAGE 1: EXECUTIVE SUMMARY -->
+    <div class="page active" id="page-1">
+      <div class="pagehead">
+        <div><h1>Executive Summary</h1><p>Overall business performance at a glance</p></div>
+        <div class="rangepill">2011 – 2013</div>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi" style="--accent:#E8934A"><div class="kpi-label">Total Sales</div><div class="kpi-value">$29.36M</div><div class="kpi-sub">23,797 orders</div></div>
+        <div class="kpi" style="--accent:#4FB8A6"><div class="kpi-label">Total Profit</div><div class="kpi-value">$12.08M</div><div class="kpi-sub up">41.1% margin</div></div>
+        <div class="kpi" style="--accent:#C1622D"><div class="kpi-label">Avg Order Value</div><div class="kpi-value">$1,234</div><div class="kpi-sub">per line item</div></div>
+        <div class="kpi" style="--accent:#5B8AA6"><div class="kpi-label">Top Season</div><div class="kpi-value">Fall</div><div class="kpi-sub up">$8.43M · 28.7% of sales</div></div>
+        <div class="kpi" style="--accent:#7FB88F"><div class="kpi-label">Top Category</div><div class="kpi-value">Bikes</div><div class="kpi-sub up">96.5% of revenue</div></div>
+      </div>
+
+      <div class="grid2">
+        <div class="panel">
+          <h3>Monthly Sales &amp; Profit</h3>
+          <p class="desc">Combined across all years — rhythm of the business through the calendar</p>
+          <div class="chart-wrap" style="height:260px;"><canvas id="chart-exec-trend"></canvas></div>
+        </div>
+        <div class="panel">
+          <h3>Revenue Mix</h3>
+          <p class="desc">Share of total sales by category</p>
+          <div class="chart-wrap" style="height:260px;"><canvas id="chart-exec-mix"></canvas></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Seasonal Snapshot</h3>
+        <p class="desc">Total sales by season — see page 05 for full seasonal breakdown</p>
+        <div class="season-strip" id="exec-season-strip"></div>
+      </div>
+    </div>
+
+    <!-- PAGE 2: KPI DEEP DIVE -->
+    <div class="page" id="page-2">
+      <div class="pagehead">
+        <div><h1>KPI Deep Dive</h1><p>Performance broken down by category and by year</p></div>
+        <div class="rangepill">2011 – 2013</div>
+      </div>
+
+      <div class="grid3">
+        <div class="panel" style="border-top:3px solid #E8934A;">
+          <h3>Bikes</h3>
+          <p class="desc">Core category</p>
+          <table>
+            <tr><td class="label">Sales</td><td>$28.32M</td></tr>
+            <tr><td class="label">Profit</td><td>$11.51M</td></tr>
+            <tr><td class="label">Margin</td><td>40.6%</td></tr>
+            <tr><td class="label">Orders</td><td>11,366</td></tr>
+          </table>
+        </div>
+        <div class="panel" style="border-top:3px solid #4FB8A6;">
+          <h3>Accessories</h3>
+          <p class="desc">High order count, low ticket size</p>
+          <table>
+            <tr><td class="label">Sales</td><td>$700.8K</td></tr>
+            <tr><td class="label">Profit</td><td>$438.7K</td></tr>
+            <tr><td class="label">Margin</td><td>62.6%</td></tr>
+            <tr><td class="label">Orders</td><td>7,750</td></tr>
+          </table>
+        </div>
+        <div class="panel" style="border-top:3px solid #C1622D;">
+          <h3>Clothing</h3>
+          <p class="desc">Smallest category by revenue</p>
+          <table>
+            <tr><td class="label">Sales</td><td>$339.8K</td></tr>
+            <tr><td class="label">Profit</td><td>$136.4K</td></tr>
+            <tr><td class="label">Margin</td><td>40.1%</td></tr>
+            <tr><td class="label">Orders</td><td>4,681</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div class="panel">
+          <h3>Year-over-Year Sales</h3>
+          <p class="desc">Full calendar years only (2011–2013; 2010 and 2014 are partial)</p>
+          <div class="chart-wrap" style="height:230px;"><canvas id="chart-yoy"></canvas></div>
+        </div>
+        <div class="panel">
+          <h3>Top Subcategories by Sales</h3>
+          <p class="desc">Ranked, all-time</p>
+          <table id="table-subcat"></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE 3: SALES & PROFIT TRENDS -->
+    <div class="page" id="page-3">
+      <div class="pagehead">
+        <div><h1>Sales &amp; Profit Trends</h1><p>Where the revenue and profit are trending across the year</p></div>
+        <div class="rangepill">2011 – 2013</div>
+      </div>
+
+      <div class="panel">
+        <h3>Monthly Sales vs Profit</h3>
+        <p class="desc">Dual view of top-line sales against bottom-line profit, month by month</p>
+        <div class="chart-wrap" style="height:300px;"><canvas id="chart-trend-monthly"></canvas></div>
+      </div>
+
+      <div class="grid2">
+        <div class="panel">
+          <h3>Quarterly Sales</h3>
+          <p class="desc">Steady climb from Q1 to Q4</p>
+          <div class="chart-wrap" style="height:240px;"><canvas id="chart-quarter"></canvas></div>
+        </div>
+        <div class="panel">
+          <h3>Order Volume by Month</h3>
+          <p class="desc">Order count doesn't always track sales dollars</p>
+          <div class="chart-wrap" style="height:240px;"><canvas id="chart-orders-month"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE 4: CATEGORY PERFORMANCE -->
+    <div class="page" id="page-4">
+      <div class="pagehead">
+        <div><h1>Category Performance</h1><p>Sales and profit by product category and subcategory</p></div>
+        <div class="rangepill">All time</div>
+      </div>
+
+      <div class="grid2">
+        <div class="panel">
+          <h3>Sales by Category</h3>
+          <p class="desc">Bikes dominate the portfolio</p>
+          <div class="chart-wrap" style="height:280px;"><canvas id="chart-cat-bar"></canvas></div>
+        </div>
+        <div class="panel">
+          <h3>Top Subcategories</h3>
+          <p class="desc">Road Bikes lead, followed by Mountain and Touring</p>
+          <div class="chart-wrap" style="height:280px;"><canvas id="chart-subcat-bar"></canvas></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Profit Margin by Category</h3>
+        <p class="desc">Accessories carry the highest margin despite the smallest revenue</p>
+        <div class="chart-wrap" style="height:220px;"><canvas id="chart-cat-margin"></canvas></div>
+      </div>
+    </div>
+
+    <!-- PAGE 5: SEASONAL VARIANCE -->
+    <div class="page" id="page-5">
+      <div class="pagehead">
+        <div><h1>Seasonal Variance</h1><p>How demand shifts across Spring, Summer, Fall and Winter</p></div>
+        <div class="rangepill">2011 – 2013</div>
+      </div>
+
+      <div class="season-strip" id="season-page-strip" style="margin-bottom:16px;"></div>
+
+      <div class="grid2">
+        <div class="panel">
+          <h3>Sales &amp; Profit by Season</h3>
+          <p class="desc">Fall leads, Spring trails — a ~28% swing top to bottom</p>
+          <div class="chart-wrap" style="height:260px;"><canvas id="chart-season-bar"></canvas></div>
+        </div>
+        <div class="panel">
+          <h3>Category Mix by Season</h3>
+          <p class="desc">Does the product mix shift with the seasons?</p>
+          <div class="chart-wrap" style="height:260px;"><canvas id="chart-season-cat"></canvas></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Seasonal Consistency Across Years</h3>
+        <p class="desc">Fall &amp; Summer outperform Spring &amp; Winter consistently across 2011–2013</p>
+        <div class="chart-wrap" style="height:260px;"><canvas id="chart-season-year"></canvas></div>
+      </div>
+
+      <div class="insight-grid">
+        <div class="insight">🍂 <span><b>Fall is the strongest season</b> at $8.43M in sales — 28.7% of total revenue — driven primarily by Bikes.</span></div>
+        <div class="insight">🌸 <span><b>Spring is consistently softest</b> at $6.06M, roughly 28% behind Fall, likely reflecting a post-winter ramp-up period.</span></div>
+        <div class="insight">📊 <span><b>Margins stay stable</b> across seasons (47.3%–48.6%) — the seasonal swing is a volume story, not a pricing or mix story.</span></div>
+        <div class="insight">🔁 <span><b>The pattern repeats every year</b> — Fall &amp; Summer beat Spring &amp; Winter in each full calendar year (2011–2013), suggesting a durable, plannable cycle.</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const seasonColors = {Spring:'#7FB88F',Summer:'#E8934A',Fall:'#C1622D',Winter:'#5B8AA6'};
+const muted = '#8FA1A0';
+const gridColor = 'rgba(255,255,255,0.06)';
+
+Chart.defaults.color = muted;
+Chart.defaults.font.family = "'IBM Plex Sans', sans-serif";
+Chart.defaults.font.size = 11;
+Chart.defaults.borderColor = gridColor;
+
+const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const monthSales = [1868572,1744678,1908589,1948432,2205152,2936178,2412981,2689541,2536757,2916661,2979421,3211715];
+const monthProfit = [765944,714821,782739,800573,903739,1204943,995231,1105787,1045135,1200298,1234051,1327623];
+const monthOrders = [2043,1564,1793,1763,1888,2110,1959,2050,1968,2183,2173,2303];
+
+const quarters = ['Q1','Q2','Q3','Q4'];
+const quarterSales = [5521840,7089762,7639278,9107797];
+
+const seasons = ['Spring','Summer','Fall','Winter'];
+const seasonSales = {Spring:6062174,Summer:8038699,Fall:8432839,Winter:6824965};
+const seasonProfit = {Spring:2487051,Summer:3305961,Fall:3479484,Winter:2808388};
+const seasonOrders = {Spring:5444,Summer:6119,Fall:6324,Winter:5910};
+const seasonMargin = {Spring:48.4,Summer:47.5,Fall:47.3,Winter:48.6};
+
+const catLabels = ['Bikes','Accessories','Clothing'];
+const catSales = [28318145,700760,339773];
+const catProfit = [11505797,438675,136413];
+const catMargin = [40.6,62.6,40.1];
+
+const subcatLabels = ['Road Bikes','Mountain Bikes','Touring Bikes','Tires & Tubes','Helmets','Jerseys','Shorts','Bottles & Cages'];
+const subcatSales = [14520584,9952760,3844801,245529,225336,172951,71320,56798];
+const subcatData = [
+  {name:'Road Bikes', sales:14520584, profit:5537300},
+  {name:'Mountain Bikes', sales:9952760, profit:4513624},
+  {name:'Touring Bikes', sales:3844801, profit:1454873},
+  {name:'Tires & Tubes', sales:245529, profit:153701},
+  {name:'Helmets', sales:225336, profit:141060},
+  {name:'Jerseys', sales:172951, profit:39779},
+  {name:'Shorts', sales:71320, profit:44646},
+  {name:'Bottles & Cages', sales:56798, profit:35555},
+];
+
+const seasonCat = {
+  Fall:   {Bikes:8149415, Accessories:191959, Clothing:91465},
+  Spring: {Bikes:5818481, Accessories:164938, Clothing:78754},
+  Summer: {Bikes:7769686, Accessories:180266, Clothing:88747},
+  Winter: {Bikes:6580562, Accessories:163598, Clothing:80806},
+};
+
+const seasonYear = {
+  2011: {Fall:1971837, Spring:1548954, Summer:1949144, Winter:1605590},
+  2012: {Fall:1559292, Spring:1132697, Summer:1523636, Winter:1626860},
+  2013: {Fall:4901709, Spring:3380523, Summer:4565919, Winter:3503399},
+};
+
+function fmtM(v){ return '$' + (v/1e6).toFixed(2) + 'M'; }
+function fmtK(v){ return v>=1e6 ? fmtM(v) : '$'+(v/1e3).toFixed(0)+'K'; }
+
+// --- Season strip builder ---
+function buildSeasonStrip(containerId){
+  const el = document.getElementById(containerId);
+  const max = Math.max(...seasons.map(s=>seasonSales[s]));
+  const order = ['Fall','Summer','Winter','Spring'];
+  el.innerHTML = order.map(s=>`
+    <div class="season-card">
+      <span class="dot" style="background:${seasonColors[s]}"></span><span class="sname">${s}</span>
+      <div class="sval">${fmtM(seasonSales[s])}</div>
+      <div style="font-size:11px;color:${muted};margin-top:3px;">${seasonOrders[s].toLocaleString()} orders · ${seasonMargin[s]}% margin</div>
+      <div class="sbar"><div style="width:${(seasonSales[s]/max*100).toFixed(0)}%;background:${seasonColors[s]}"></div></div>
+    </div>`).join('');
+}
+buildSeasonStrip('exec-season-strip');
+buildSeasonStrip('season-page-strip');
+
+// --- Subcategory table ---
+document.getElementById('table-subcat').innerHTML = `
+  <tr><th>Subcategory</th><th>Sales</th><th>Profit</th></tr>
+  ${subcatData.map(d=>`<tr><td class="label">${d.name}</td><td>${fmtK(d.sales)}</td><td>${fmtK(d.profit)}</td></tr>`).join('')}
+`;
+
+// --- Charts (created lazily on first tab view for correct sizing) ---
+const chartBuilders = {};
+const chartInstances = {};
+
+chartBuilders['chart-exec-trend'] = () => new Chart(document.getElementById('chart-exec-trend'), {
+  type:'line',
+  data:{labels:months, datasets:[
+    {label:'Sales', data:monthSales, borderColor:'#E8934A', backgroundColor:'rgba(232,147,74,0.12)', fill:true, tension:0.4, pointRadius:0, borderWidth:2},
+    {label:'Profit', data:monthProfit, borderColor:'#4FB8A6', backgroundColor:'rgba(79,184,166,0.08)', fill:true, tension:0.4, pointRadius:0, borderWidth:2},
+  ]},
+  options:{responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{labels:{boxWidth:10, usePointStyle:true}}},
+    scales:{y:{grid:{color:gridColor}, ticks:{callback:v=>fmtK(v)}}, x:{grid:{display:false}}}}
+});
+
+chartBuilders['chart-exec-mix'] = () => new Chart(document.getElementById('chart-exec-mix'), {
+  type:'doughnut',
+  data:{labels:catLabels, datasets:[{data:catSales, backgroundColor:['#E8934A','#4FB8A6','#C1622D'], borderColor:'#1B2325', borderWidth:3}]},
+  options:{responsive:true, maintainAspectRatio:false, cutout:'65%',
+    plugins:{legend:{position:'bottom', labels:{boxWidth:10, usePointStyle:true, padding:14}}}}
+});
+
+chartBuilders['chart-yoy'] = () => new Chart(document.getElementById('chart-yoy'), {
+  type:'bar',
+  data:{labels:['2011','2012','2013'], datasets:[{label:'Sales', data:[7075526,5842485,16351550], backgroundColor:'#E8934A', borderRadius:5, maxBarThickness:60}]},
+  options:{responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{display:false}},
+    scales:{y:{grid:{color:gridColor}, ticks:{callback:v=>fmtK(v)}}, x:{grid:{display:false}}}}
+});
+
+chartBuilders['chart-trend-monthly'] = () => new Chart(document.getElementById('chart-trend-monthly'), {
+  type:'line',
+  data:{labels:months, datasets:[
+    {label:'Sales', data:monthSales, borderColor:'#E8934A', backgroundColor:'rgba(232,147,74,0.1)', fill:true, tension:0.4, pointRadius:3, pointBackgroundColor:'#E8934A', borderWidth:2.5},
+    {label:'Profit', data:monthProfit, borderColor:'#4FB8A6', backgroundColor:'rgba(79,184,166,0.08)', fill:true, tension:0.4, pointRadius:3, pointBackgroundColor:'#4FB8A6', borderWidth:2.5},
+  ]},
+  options:{responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{labels:{boxWidth:10, usePointStyle:true}}},
+    scales:{y:{grid:{color:gridColor}, ticks:{callback:v=>fmtK(v)}}, x:{grid:{display:false}}}}
+});
+
+chartBuilders['chart-quarter'] = () => new Chart(document.getElementById('chart-quarter'), {
+  type:'bar',
+  data:{labels:quarters, datasets:[{label:'Sales', data:quarterSales, backgroundColor:'#E8934A', borderRadius:6, maxBarThickness:70}]},
+  options:{responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{display:false}},
+    scales:{y:{grid:{color:gridColor}, ticks:{callback:v=>fmtK(v)}}, x:{grid:{display:false}}}}
+});
+
+chartBuilders['chart-orders-month'] = () => new Chart(document.getElementById('chart-orders-month'), {
+  type:'bar',
+  data:{labels:months, datasets:[{label:'Orders', data:monthOrders, backgroundColor:'#4FB8A6', borderRadius:4, maxBarThickness:26}]},
+  options:{responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{display:false}},
+    scales:{y:{grid:{color:gridColor}}, x:{grid:{display:false}}}}
+});
+
+chartBuilders['chart-cat-bar'] = () => new Chart(document.getElementById('chart-cat-bar'), {
+  type:'bar',
+  data:{labels:catLabels, datasets:[{label:'Sales', data:catSales, backgroundColor:['#E8934A','#4FB8A6','#C1622D'], borderRadius:6, maxBarThickness:80}]},
+  options:{indexAxis:'y', responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{display:false}},
+    scales:{x:{grid:{color:gridColor}, ticks:{callback:v=>fmtK(v)}}, y:{grid:{display:false}}}}
+});
+
+chartBuilders['chart-subcat-bar'] = () => new Chart(document.getElementById('chart-subcat-bar'), {
+  type:'bar',
+  data:{labels:subcatLabels, datasets:[{label:'Sales', data:subcatSales, backgroundColor:'#E8934A', borderRadius:5, maxBarThickness:20}]},
+  options:{indexAxis:'y', responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{display:false}},
+    scales:{x:{grid:{color:gridColor}, ticks:{callback:v=>fmtK(v)}}, y:{grid:{display:false}, ticks:{font:{size:10.5}}}}}
+});
+
+chartBuilders['chart-cat-margin'] = () => new Chart(document.getElementById('chart-cat-margin'), {
+  type:'bar',
+  data:{labels:catLabels, datasets:[{label:'Margin %', data:catMargin, backgroundColor:['#E8934A','#4FB8A6','#C1622D'], borderRadius:6, maxBarThickness:90}]},
+  options:{responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{display:false}},
+    scales:{y:{grid:{color:gridColor}, ticks:{callback:v=>v+'%'}, max:70}, x:{grid:{display:false}}}}
+});
+
+chartBuilders['chart-season-bar'] = () => new Chart(document.getElementById('chart-season-bar'), {
+  type:'bar',
+  data:{labels:seasons, datasets:[
+    {label:'Sales', data:seasons.map(s=>seasonSales[s]), backgroundColor:'#E8934A', borderRadius:5, maxBarThickness:40},
+    {label:'Profit', data:seasons.map(s=>seasonProfit[s]), backgroundColor:'#4FB8A6', borderRadius:5, maxBarThickness:40},
+  ]},
+  options:{responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{labels:{boxWidth:10, usePointStyle:true}}},
+    scales:{y:{grid:{color:gridColor}, ticks:{callback:v=>fmtK(v)}}, x:{grid:{display:false}}}}
+});
+
+chartBuilders['chart-season-cat'] = () => new Chart(document.getElementById('chart-season-cat'), {
+  type:'bar',
+  data:{labels:seasons, datasets:[
+    {label:'Bikes', data:seasons.map(s=>seasonCat[s].Bikes), backgroundColor:'#E8934A', stack:'s'},
+    {label:'Accessories', data:seasons.map(s=>seasonCat[s].Accessories), backgroundColor:'#4FB8A6', stack:'s'},
+    {label:'Clothing', data:seasons.map(s=>seasonCat[s].Clothing), backgroundColor:'#C1622D', stack:'s'},
+  ]},
+  options:{responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{labels:{boxWidth:10, usePointStyle:true}}},
+    scales:{y:{grid:{color:gridColor}, ticks:{callback:v=>fmtK(v)}, stacked:true}, x:{grid:{display:false}, stacked:true}}}
+});
+
+chartBuilders['chart-season-year'] = () => new Chart(document.getElementById('chart-season-year'), {
+  type:'line',
+  data:{labels:['2011','2012','2013'], datasets: seasons.map(s=>({
+    label:s, data:[seasonYear[2011][s],seasonYear[2012][s],seasonYear[2013][s]],
+    borderColor:seasonColors[s], backgroundColor:seasonColors[s], tension:0.35, pointRadius:4, borderWidth:2.5
+  }))},
+  options:{responsive:true, maintainAspectRatio:false,
+    plugins:{legend:{labels:{boxWidth:10, usePointStyle:true}}},
+    scales:{y:{grid:{color:gridColor}, ticks:{callback:v=>fmtK(v)}}, x:{grid:{display:false}}}}
+});
+
+// --- Tab navigation ---
+const navButtons = document.querySelectorAll('.navbtn');
+navButtons.forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const pageNum = btn.getAttribute('data-page');
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById('page-'+pageNum).classList.add('active');
+    navButtons.forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    initChartsForPage(pageNum);
+  });
+});
+
+const pageCharts = {
+  '1':['chart-exec-trend','chart-exec-mix'],
+  '2':['chart-yoy'],
+  '3':['chart-trend-monthly','chart-quarter','chart-orders-month'],
+  '4':['chart-cat-bar','chart-subcat-bar','chart-cat-margin'],
+  '5':['chart-season-bar','chart-season-cat','chart-season-year'],
+};
+function initChartsForPage(pageNum){
+  (pageCharts[pageNum]||[]).forEach(id=>{
+    if(!chartInstances[id]){
+      chartInstances[id] = chartBuilders[id]();
+    }
+  });
+}
+initChartsForPage('1');
+</script>
+</body>
+</html>
